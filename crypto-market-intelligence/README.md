@@ -25,7 +25,12 @@ The objective of this project is to analyse Bitcoin market data using Python. Th
 - Historical candles are needed to calculate the 7-day and 30-day moving averages and the rolling comparison thresholds before selecting the last 30 completed days.
 - The API request succeeded after the primary Wi-Fi adapter's DNS configuration was changed to Google DNS.
 
+### Invalid Pair Test
 
+- Test request: `pair=INVALIDPAIR&interval=1440`
+- Kraken returned: `{"error":["EQuery:Unknown asset pair"]}`
+- Observation: An invalid trading pair produces an error response rather than the expected OHLC market-data structure.
+- Implementation requirement: The Python workflow must check the API's `error` field and stop with a clear message if an error is returned, rather than assuming valid market data exists.
 
 ## Planned Analysis
 
