@@ -1,7 +1,7 @@
 
 """Bitcoin Market Behaviour Analyzer.
 
-Fetches daily Bitcoin OHLC data from Kraken, calculates descriptive
+Fetches daily or 4-hour Bitcoin OHLC data from Kraken, calculates descriptive
 market metrics, applies documented rules, and generates a Markdown report.
 """
 
@@ -24,8 +24,8 @@ REPORT_PATH = REPORTS_DIR / "sample_report.md"
 
 KRAKEN_URL = "https://api.kraken.com/0/public/OHLC"
 TRADING_PAIR = "XBTUSD"
-INTERVAL_MINUTES = 1440
-
+DAILY_INTERVAL_MINUTES = 1440
+FOUR_HOUR_INTERVAL_MINUTES = 240
 ANALYSIS_DAYS = 30
 LOOKBACK_DAYS = 30
 REQUEST_TIMEOUT_SECONDS = 20
@@ -35,12 +35,15 @@ REQUEST_TIMEOUT_SECONDS = 20
 # 1. Retrieve and validate Kraken data
 # ---------------------------------------------------------
 
-def fetch_market_data() -> pd.DataFrame:
-    """Fetch daily OHLC candles and validate Kraken's response."""
+def fetch_market_data(interval_minutes: int = DAILY_INTERVAL_MINUTES) -> pd.DataFrame:
+    """Fetch daily or 4-hour OHLC candles and validate Kraken's response."""
+
+    if interval_minutes not in (DAILY_INTERVAL_MINUTES, FOUR_HOUR_INTERVAL_MINUTES):
+        raise ValueError("Supported intervals are 1440 (daily) and 240 (4-hour).")
 
     params = {
         "pair": TRADING_PAIR,
-        "interval": INTERVAL_MINUTES,
+        "interval": interval_minutes,
     }
 
     try:
@@ -111,7 +114,9 @@ def fetch_market_data() -> pd.DataFrame:
         raise RuntimeError("OHLC data contains negative trading volume.")
 
     df["timestamp"] = df["timestamp"].astype("int64")
-    df["date"] = pd.to_datetime(df["timestamp"], unit="s", utc=True).dt.date
+    # Keep a timezone-aware UTC timestamp for exact chart alignment and hover details.
+    df["datetime_utc"] = pd.to_datetime(df["timestamp"], unit="s", utc=True)
+    df["date"] = df["datetime_utc"].dt.date
 
     df = df.sort_values("timestamp").drop_duplicates("timestamp")
     df = df.reset_index(drop=True)
@@ -124,7 +129,10 @@ def fetch_market_data() -> pd.DataFrame:
     df = df.iloc[:-1].copy().reset_index(drop=True)
 
     # Ensure enough history for rolling metrics and the first daily return.
-    required = ANALYSIS_DAYS + LOOKBACK_DAYS + 1
+    # Keep the same 30-day visible window for both views: 30 daily bars or
+    # 180 four-hour bars. The API supplies enough history for the lookback.
+    visible_observations = ANALYSIS_DAYS if interval_minutes == DAILY_INTERVAL_MINUTES else ANALYSIS_DAYS * 6
+    required = visible_observations + LOOKBACK_DAYS + 1
     if len(df) < required:
         raise RuntimeError(
             f"Need at least {required} completed candles; "
@@ -138,7 +146,9 @@ def fetch_market_data() -> pd.DataFrame:
 # 2. Calculate metrics and apply documented rules
 # ---------------------------------------------------------
 
-def analyse_market(df: pd.DataFrame) -> pd.DataFrame:
+def analyse_market(
+    df: pd.DataFrame, interval_minutes: int = DAILY_INTERVAL_MINUTES
+) -> pd.DataFrame:
     """Calculate rolling metrics without using future observations."""
 
     df = df.copy()
@@ -183,20 +193,25 @@ def analyse_market(df: pd.DataFrame) -> pd.DataFrame:
 
     # Select the last 30 completed days only after calculating
     # metrics that require the earlier historical lookback.
-    return df.tail(ANALYSIS_DAYS).reset_index(drop=True)
+    visible_observations = ANALYSIS_DAYS if interval_minutes == DAILY_INTERVAL_MINUTES else ANALYSIS_DAYS * 6
+    return df.tail(visible_observations).reset_index(drop=True)
 
 
 # ---------------------------------------------------------
 # 3. Generate a Markdown report
 # ---------------------------------------------------------
 
-def generate_report(df: pd.DataFrame) -> Path:
+def generate_report(
+    df: pd.DataFrame, interval_minutes: int = DAILY_INTERVAL_MINUTES
+) -> Path:
     """Write a descriptive report for the completed analysis period."""
 
     if df.empty:
         raise RuntimeError("Cannot generate a report from empty data.")
 
     latest = df.iloc[-1]
+    timeframe = "Daily" if interval_minutes == DAILY_INTERVAL_MINUTES else "4-hour"
+    unit = "day" if interval_minutes == DAILY_INTERVAL_MINUTES else "4-hour candle"
     first_close = df.iloc[0]["close"]
     last_close = latest["close"]
     period_change = (last_close / first_close - 1) * 100
@@ -214,15 +229,15 @@ def generate_report(df: pd.DataFrame) -> Path:
 
 ## Research question
 
-How do Bitcoin's daily price movements and trading volume relate to its
-short-term (7-day) and longer-term (30-day) price trends over the last
-30 completed daily candles?
+How do Bitcoin's price movements and trading volume relate to its
+short-term (7-observation) and longer-term (30-observation) price trends
+over the displayed completed {timeframe.lower()} candles?
 
 ## Data source
 
 - Exchange: Kraken
 - Pair: XBT/USD
-- Interval: Daily
+- Interval: {timeframe}
 - Analysis observations: {len(df)}
 
 ## Summary
@@ -230,22 +245,22 @@ short-term (7-day) and longer-term (30-day) price trends over the last
 - First closing price in the period: ${first_close:,.2f}
 - Latest completed closing price: ${last_close:,.2f}
 - Closing-price change across the period: {period_change:+.2f}%
-- Latest daily return: {latest['daily_return_pct']:+.2f}%
+- Latest {unit} return: {latest['daily_return_pct']:+.2f}%
 - Latest 7-day SMA: ${latest['sma_7']:,.2f}
 - Latest 30-day SMA: ${latest['sma_30']:,.2f}
 - Latest trend comparison: {latest['trend_comparison']}
 - Days flagged for unusual movement: {unusual_count}
 - Days flagged for high volume: {high_volume_count}
 
-## Daily observations
+## {timeframe} observations
 
-| Date | Close (USD) | Return (%) | Volume (XBT) | 7-day SMA | 30-day SMA | Unusual move | High volume |
+| Timestamp (UTC) | Close (USD) | Return (%) | Volume (XBT) | 7-observation SMA | 30-observation SMA | Unusual move | High volume |
 |---|---:|---:|---:|---:|---:|:---:|:---:|
 """
 
     for _, row in df.iterrows():
         report += (
-            f"| {row['date']} "
+            f"| {row['datetime_utc'].strftime('%Y-%m-%d %H:%M')} UTC "
             f"| ${row['close']:,.2f} "
             f"| {row['daily_return_pct']:+.2f}% "
             f"| {row['volume']:,.4f} "
@@ -258,11 +273,11 @@ short-term (7-day) and longer-term (30-day) price trends over the last
     report += """
 ## Rule definitions
 
-1. **Unusual movement:** Absolute daily return exceeds twice the median
-   absolute daily return across the preceding 30 completed days.
-2. **High volume:** Daily volume exceeds the average volume across the
-   preceding 30 completed days.
-3. **Trend comparison:** The 7-day SMA is compared with the 30-day SMA.
+1. **Unusual movement:** Absolute candle return exceeds twice the median
+   absolute return across the preceding 30 completed candles.
+2. **High volume:** Candle volume exceeds the average volume across the
+   preceding 30 completed candles.
+3. **Trend comparison:** The 7-observation SMA is compared with the 30-observation SMA.
 
 ## Interpretation and limitations
 

@@ -1,0 +1,41 @@
+
+name: Bitcoin Market Analysis Export
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export-analysis:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m pytest -v
+
+      - name: Generate market analysis exports
+        run: python export_analysis.py
+
+      - name: Upload JSON exports
+        uses: actions/upload-artifact@v4
+        with:
+          name: bitcoin-market-analysis-json
+          path: reports/exports/*.json
+          if-no-files-found: error
+          retention-days: 14

@@ -5,3 +5,5 @@ __pycache__/
 *.py[cod]
 .streamlit/secrets.toml
 .env
+# Generated market-analysis exports
+reports/exports/
