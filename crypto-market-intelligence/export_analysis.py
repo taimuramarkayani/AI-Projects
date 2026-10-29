@@ -94,7 +94,7 @@ def save_export(data: dict) -> Path:
     EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    path = EXPORT_DIR / f"bitcoin_analysis_{timestamp}.json"
+    path = EXPORT_DIR / f"bitcoin_analysis_{data['timeframe']}_{timestamp}.json"
     path.write_text(
         json.dumps(data, indent=2, allow_nan=False),
         encoding="utf-8",

@@ -7,3 +7,5 @@ __pycache__/
 .env
 # Generated market-analysis exports
 reports/exports/
+# Generated PDF reports and chart images
+reports/pdf/

@@ -4,3 +4,6 @@ pandas
 plotly
 streamlit
 pytest
+reportlab
+kaleido
+python-dotenv
