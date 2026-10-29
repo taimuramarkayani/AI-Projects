@@ -89,16 +89,24 @@ def build_export(interval_minutes: int = DAILY_INTERVAL_MINUTES) -> dict:
     }
 
 
+
 def save_export(data: dict) -> Path:
-    """Save export data to a timestamped JSON file."""
+    """Validate and save export data to a timestamped JSON file."""
+    # Serialize first so NaN and Infinity are rejected before saving.
+    try:
+        json_content = json.dumps(data, indent=2, allow_nan=False)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(
+            f"Export data must contain only valid JSON values: {exc}"
+        ) from exc
+
     EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    path = EXPORT_DIR / f"bitcoin_analysis_{data['timeframe']}_{timestamp}.json"
-    path.write_text(
-        json.dumps(data, indent=2, allow_nan=False),
-        encoding="utf-8",
-    )
+    timeframe = data.get("timeframe", "unknown")
+    path = EXPORT_DIR / f"bitcoin_analysis_{timeframe}_{timestamp}.json"
+
+    path.write_text(json_content, encoding="utf-8")
     return path
 
 
