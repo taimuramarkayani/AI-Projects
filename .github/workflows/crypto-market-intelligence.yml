@@ -1,0 +1,52 @@
+name: Crypto Market Intelligence
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 9 * * 1,4"
+
+permissions:
+  contents: read
+
+jobs:
+  run-analysis:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: crypto-market-intelligence/requirements.txt
+
+      - name: Install dependencies
+        working-directory: crypto-market-intelligence
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run automated tests
+        working-directory: crypto-market-intelligence
+        run: python -m pytest -v
+
+      - name: Generate market analysis JSON
+        working-directory: crypto-market-intelligence
+        run: python export_analysis.py
+
+      - name: Generate combined PDF report
+        working-directory: crypto-market-intelligence
+        env:
+          GOOGLE_APPS_SCRIPT_URL: ${{ secrets.GOOGLE_APPS_SCRIPT_URL }}
+        run: python generate_pdf_report.py
+
+      - name: Submit report to Google Sheets and email
+        working-directory: crypto-market-intelligence
+        env:
+          GOOGLE_APPS_SCRIPT_URL: ${{ secrets.GOOGLE_APPS_SCRIPT_URL }}
+          BITCOIN_API_SECRET: ${{ secrets.BITCOIN_API_SECRET }}
+        run: python google_sheets_sender.py
