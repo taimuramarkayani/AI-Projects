@@ -141,6 +141,25 @@ The workflow should be confirmed in GitHub after the project is pushed.
 
 `AI_LOG.md` documents the use of AI assistance, review decisions, and verification work. The project uses explicit Python calculations and rules; an AI model is not part of the market-analysis workflow.
 
+### Independent Metric Verification
+
+I independently checked the daily Bitcoin return for 26 October 2026 using Google Sheets.
+
+- Previous day's closing price (25 October 2026): $80,048.50
+- Current day's closing price (26 October 2026): $80,001.90
+
+Formula used:
+
+((Current Close - Previous Close) / Previous Close) × 100
+
+Google Sheets calculation:
+
+`=((80001.90-80048.50)/80048.50)*100`
+
+Calculated result: -0.05821470733%, which rounds to -0.06%.
+
+This matches the daily return reported by the project for 26 October 2026.
+
 ## Limitations
 
 - Historical price and volume patterns do not predict future prices reliably.
